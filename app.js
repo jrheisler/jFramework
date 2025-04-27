@@ -11,6 +11,7 @@ Theme.onModeChange = () => {
 let currentFields = [];
 let currentRecords = [];
 let flashRowIndex = null; // 🔥 Track recently edited row
+let allRecords = []; // <-- Save the full unfiltered data!
 
 // 🔵 Create hidden JSON uploader
 const jsonUploader = document.createElement("input");
@@ -93,30 +94,52 @@ function parseCsvToJson(csvText) {
   }
   
   
-// 🔵 Build Grid Function
-function buildGrid(fields, records) {
-    const gridContainer = document.getElementById("gridContainer");
-    gridContainer.innerHTML = ""; // Clear previous grid
-  
-    if (!records || records.length === 0) {
-      gridContainer.textContent = "No data loaded.";
-      return;
-    }
-  
-    // Save global copy
-    currentFields = fields;
-    currentRecords = records;
-  
-    const grid = createDataGrid({
-      id: "spreadsheetView",
-      fields,
-      records
-    });
-  
-    gridContainer.appendChild(grid);
-    flashRowIndex = null;
+// 🔵 Global filter text
+let currentSearchText = "";
 
+function filterRecords() {
+  if (!currentSearchText) {
+    buildGrid(currentFields, allRecords, { filtered: true });
+    return;
   }
+
+  const filtered = allRecords.filter(record => {
+    return Object.values(record).some(val =>
+      val.toString().toLowerCase().includes(currentSearchText.toLowerCase())
+    );
+  });
+
+  buildGrid(currentFields, filtered, { filtered: true });
+}
+
+// 🔵 Updated Build Grid (filtered if needed)
+function buildGrid(fields, records, options = {}) {
+  const gridContainer = document.getElementById("gridContainer");
+  gridContainer.innerHTML = "";
+
+  if (!records || records.length === 0) {
+    gridContainer.textContent = "No data loaded.";
+    return;
+  }
+
+  // 🔵 Save global copies
+  currentFields = fields;
+  currentRecords = records;
+
+  // If this is the *full* rebuild (not a filtered view), save it
+  if (!options.filtered) {
+    allRecords = [...records];
+  }
+
+  const grid = createDataGrid({
+    id: "spreadsheetView",
+    fields,
+    records
+  });
+
+  gridContainer.appendChild(grid);
+  flashRowIndex = null;
+}
     
 
 // 🔵 Generate Fake Data Helper
@@ -241,6 +264,43 @@ function layout() {
     });
     container.appendChild(clearDataBtn);
   
+        // 🔎 Search Bar
+    const searchContainer = document.createElement("div");
+    Object.assign(searchContainer.style, {
+      display: "flex",
+      alignItems: "center",
+      gap: Theme.spacing.margin,
+      padding: `0 ${Theme.spacing.margin}`,
+      marginTop: Theme.spacing.margin
+    });
+
+    const searchInput = document.createElement("input");
+    searchInput.id = "searchInput";
+    searchInput.placeholder = "🔍 Search...";
+    Object.assign(searchInput.style, {
+      flex: "1",
+      padding: "10px",
+      borderRadius: "6px",
+      border: "1px solid #ccc",
+      fontFamily: Theme.fonts.base,
+      backgroundColor: Theme.colors.background,
+      color: Theme.colors.text,
+      transition: "background-color 0.3s, color 0.3s",
+      fontSize: "16px"
+    });
+
+    searchInput.addEventListener("input", (e) => {
+      currentSearchText = e.target.value.trim();
+      if (currentFields.length && currentRecords.length) {
+        filterRecords();
+      }
+    });
+
+    searchContainer.appendChild(searchInput);
+    container.appendChild(searchContainer);
+
+    
+
     // 🔵 The Grid Container
     const gridContainer = document.createElement("div");
     gridContainer.id = "gridContainer";

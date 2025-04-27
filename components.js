@@ -740,7 +740,15 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
           overflow: "hidden",
           textOverflow: "ellipsis"
         });
-        dataCell.textContent = record[field.key] !== undefined ? record[field.key] : "-";
+        const rawValue = record[field.key] !== undefined ? record[field.key].toString() : "-";
+
+        if (currentSearchText && rawValue.toLowerCase().includes(currentSearchText.toLowerCase())) {
+          const regex = new RegExp(`(${currentSearchText})`, 'ig');
+          dataCell.innerHTML = rawValue.replace(regex, '<mark>$1</mark>');
+        } else {
+          dataCell.textContent = rawValue;
+        }
+
         dataRow.appendChild(dataCell);
       });
   
@@ -760,5 +768,6 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
   }
   
   
+
 
   
