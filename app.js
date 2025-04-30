@@ -12,6 +12,15 @@ let currentFields = [];
 let currentRecords = [];
 let flashRowIndex = null; // 🔥 Track recently edited row
 let allRecords = []; // <-- Save the full unfiltered data!
+let currentSortField = null;
+let currentSortDirection = "asc"; // or "desc"
+let currentSearchTerm = "";
+let insertRowBtn;
+let duplicateRowBtn;
+let deleteRowBtn;
+// 🧠 Track Selected Row Globally
+let selectedRowIndex = null;
+
 
 // 🔵 Create hidden JSON uploader
 const jsonUploader = document.createElement("input");
@@ -111,35 +120,138 @@ function filterRecords() {
 
   buildGrid(currentFields, filtered, { filtered: true });
 }
+// 🔥 Utility to Enable/Disable Toolbar Buttons
+function updateToolbarState() {
+  console.log("120", selectedRowIndex);
+  const hasSelection = selectedRowIndex !== null;
+  console.log("122", hasSelection);
+  insertRowBtn.disabled = !hasSelection;
+  duplicateRowBtn.disabled = !hasSelection;
+  deleteRowBtn.disabled = !hasSelection;
+}
+
+function viewSummary() {
+  if (!currentRecords || currentRecords.length === 0) {
+    alert("No data loaded!");
+    return;
+  }
+
+  // 1. Find numeric columns
+  const numericKeys = currentFields.filter(field => 
+    currentRecords.some(record => !isNaN(parseFloat(record[field.key])) && isFinite(record[field.key]))
+  ).map(f => f.key);
+
+  if (numericKeys.length === 0) {
+    alert("No numeric fields found to summarize.");
+    return;
+  }
+
+  // 2. Calculate totals and averages
+  const summaryData = numericKeys.map(key => {
+    const values = currentRecords.map(r => parseFloat(r[key])).filter(v => !isNaN(v));
+    const total = values.reduce((sum, v) => sum + v, 0);
+    const average = values.length ? (total / values.length) : 0;
+    return { key, total, average };
+  });
+
+  // 3. Build HTML summary
+  const summaryHtml = `
+    <div style="font-family: ${Theme.fonts.base}; color: ${Theme.colors.text};">
+      <p><strong>Records:</strong> ${currentRecords.length}</p>
+      <table style="width:100%; border-collapse: collapse; margin-top: 10px;">
+        <thead>
+          <tr>
+            <th style="text-align: left; padding: 6px; border-bottom: 1px solid #ccc;">Field</th>
+            <th style="text-align: right; padding: 6px; border-bottom: 1px solid #ccc;">Total</th>
+            <th style="text-align: right; padding: 6px; border-bottom: 1px solid #ccc;">Average</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${summaryData.map(d => `
+            <tr>
+              <td style="padding: 6px;">${d.key}</td>
+              <td style="text-align: right; padding: 6px;">${d.total.toFixed(2)}</td>
+              <td style="text-align: right; padding: 6px;">${d.average.toFixed(2)}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // 4. Create and show modal
+  const modal = createModal({
+    id: "summaryModal",
+    title: "📊 Data Summary",
+    content: summaryHtml,
+    width: "500px",
+    show: true
+  });
+
+  document.body.appendChild(modal);
+}
+
+function viewChart() {
+  if (!currentFields.length || !currentRecords.length) {
+    alert("No data loaded!");
+    return;
+  }
+
+  const modal = createModal({
+    id: "chartModal",
+    title: "📊 Quick Chart",
+    width: "700px",
+    show: true
+  });
+  document.body.appendChild(modal);
+
+  const summary = currentFields.map(field => {
+    const count = currentRecords.filter(r => (r[field.key] ?? "").trim() !== "").length;
+    return { label: field.label, value: count };
+  });
+
+  const chartSvg = createSvgBarChart({ width: 650, height: 400, data: summary });
+  modal.querySelector("div").appendChild(chartSvg);
+
+  modal.style.display = "block";
+}
+
 
 // 🔵 Updated Build Grid (filtered if needed)
-function buildGrid(fields, records, options = {}) {
+function buildGrid(fields, records) {
   const gridContainer = document.getElementById("gridContainer");
-  gridContainer.innerHTML = "";
+  gridContainer.innerHTML = ""; // Clear previous grid
 
   if (!records || records.length === 0) {
     gridContainer.textContent = "No data loaded.";
     return;
   }
 
-  // 🔵 Save global copies
+  // 🧠 Save global copy
   currentFields = fields;
   currentRecords = records;
-
-  // If this is the *full* rebuild (not a filtered view), save it
-  if (!options.filtered) {
-    allRecords = [...records];
-  }
 
   const grid = createDataGrid({
     id: "spreadsheetView",
     fields,
-    records
+    records,
+    onRowSelect: (rowIndex) => {
+      selectedRowIndex = rowIndex;
+      updateToolbarState();
+      if (rowIndex !== null) {
+        openSlideoutEditor(currentRecords[rowIndex], rowIndex);
+      } else {
+        closeSlideout(); // If nothing selected, close
+      }
+    }
   });
 
   gridContainer.appendChild(grid);
   flashRowIndex = null;
 }
+
+
+
     
 
 // 🔵 Generate Fake Data Helper
@@ -247,6 +359,7 @@ function layout() {
       });
       container.appendChild(downloadCsvBtn);
       
+      
   
     // 🧹 Clear Button
     const clearDataBtn = createButton({
@@ -258,20 +371,28 @@ function layout() {
         if (gridContainer) {
           gridContainer.innerHTML = "No data loaded.";
         }
+        currentSearchText = "";
+        allRecords = [];
+        currentRecords = [];
+        currentFields = [];
         console.log("🧹 Grid and localStorage cleared!");
       },
       color: "danger"
     });
     container.appendChild(clearDataBtn);
   
+  
+
+
         // 🔎 Search Bar
+    // 🛠 Search Box
     const searchContainer = document.createElement("div");
     Object.assign(searchContainer.style, {
       display: "flex",
+      gap: "10px",
       alignItems: "center",
-      gap: Theme.spacing.margin,
-      padding: `0 ${Theme.spacing.margin}`,
-      marginTop: Theme.spacing.margin
+      padding: "10px 0",
+      width: "100%"
     });
 
     const searchInput = document.createElement("input");
@@ -289,17 +410,118 @@ function layout() {
       fontSize: "16px"
     });
 
+    let searchDebounceTimer;
+
     searchInput.addEventListener("input", (e) => {
-      currentSearchText = e.target.value.trim();
-      if (currentFields.length && currentRecords.length) {
-        filterRecords();
-      }
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        currentSearchTerm = e.target.value.trim().toLowerCase();
+        if (currentFields.length && currentRecords.length) {
+          buildGrid(currentFields, currentRecords);
+        }
+      }, 200);
     });
 
     searchContainer.appendChild(searchInput);
     container.appendChild(searchContainer);
 
-    
+    const apiForm = createApiForm();
+    container.appendChild(apiForm);
+  
+  // 🧩 Create Toolbar
+  const toolbar = document.createElement("div");
+  Object.assign(toolbar.style, {
+    display: "flex",
+    gap: "10px",
+    marginTop: "20px",
+    marginBottom: "10px"
+  });
+
+  // ➕ Add Row Button
+  const addRowBtn = createButton({
+    id: "addRowBtn",
+    text: "➕ Add Row",
+    color: "success",
+    onClick: () => {
+      currentRecords.push({});
+      buildGrid(currentFields, currentRecords);
+    }
+  });
+  toolbar.appendChild(addRowBtn);
+
+  // 📄 Insert Row Button
+  insertRowBtn = createButton({
+    id: "insertRowBtn",
+    text: "📄 Insert Below",
+    color: "primary",
+    onClick: () => {
+      if (selectedRowIndex !== null) {
+        currentRecords.splice(selectedRowIndex + 1, 0, {}); // Insert empty row
+        // After insertion, the selected row index may shift if required
+        buildGrid(currentFields, currentRecords);
+        updateToolbarState(); // Update toolbar state after modification
+      }
+    }
+  });
+  
+
+
+  duplicateRowBtn = createButton({
+    id: "duplicateRowBtn",
+    text: "📄 Duplicate",
+    color: "primary",
+    onClick: () => {
+      if (selectedRowIndex !== null) {
+        const clone = { ...currentRecords[selectedRowIndex] };
+        currentRecords.splice(selectedRowIndex + 1, 0, clone); // Insert duplicate
+        localStorage.setItem("savedGridData", JSON.stringify({ fields: currentFields, records: currentRecords }));
+        buildGrid(currentFields, currentRecords);
+        updateToolbarState(); // Update toolbar state after duplication
+      }
+    }
+  });
+  
+
+  deleteRowBtn = createButton({
+    id: "deleteRowBtn",
+    text: "🗑️ Delete",
+    color: "danger",
+    onClick: async () => {
+      if (selectedRowIndex !== null) {
+        const confirmed = await confirmAction("Are you sure you want to delete this row?");
+        if (confirmed) {
+          currentRecords.splice(selectedRowIndex, 1);
+          selectedRowIndex = null;
+          localStorage.setItem("savedGridData", JSON.stringify({ fields: currentFields, records: currentRecords }));
+          buildGrid(currentFields, currentRecords);
+        }
+      }
+    }
+  });
+
+  const viewSummaryBtn = createButton({
+    id: "viewSummaryBtn",
+    text: "📊 View Summary",
+    color: "info",
+    onClick: () => {
+      viewSummary();
+    }
+  });
+
+  const viewChartBtn = createButton({
+    id: "viewChartBtn",
+    text: "📊 View Chart",
+    color: "info",
+    onClick: viewChart
+  });
+ 
+  toolbar.appendChild(insertRowBtn);
+  toolbar.appendChild(duplicateRowBtn);
+  toolbar.appendChild(deleteRowBtn);
+  toolbar.appendChild(viewSummaryBtn);
+  toolbar.appendChild(viewChartBtn);
+
+  container.appendChild(toolbar);
 
     // 🔵 The Grid Container
     const gridContainer = document.createElement("div");

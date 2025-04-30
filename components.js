@@ -34,7 +34,7 @@ function createButton({ id, text, onClick, color = "primary", style = {} }) {
   function createModal({ id, content = "", width = "400px", title = "", show = false }) {
     const modal = document.createElement("div");
     modal.id = id;
-  
+    
     Object.assign(modal.style, {
       position: "fixed",
       top: "50%",
@@ -68,7 +68,7 @@ function createButton({ id, text, onClick, color = "primary", style = {} }) {
       });
       modal.appendChild(titleElement);
     }
-  
+    
     // Content area
     const contentDiv = document.createElement("div");
     contentDiv.innerHTML = content;
@@ -84,9 +84,10 @@ function createButton({ id, text, onClick, color = "primary", style = {} }) {
       color: "danger",
       style: { marginTop: "20px", display: "block", marginLeft: "auto", marginRight: "auto" }
     });
-  
+    
+    
     modal.appendChild(closeBtn);
-  
+    
     return modal;
   }
   
@@ -607,7 +608,7 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
   }
   
 
-  function createDataGrid({ id, fields, records }) {
+  function createDataGrid({ id, fields, records, onRowSelect }) {
     const wrapper = document.createElement("div");
     Object.assign(wrapper.style, {
       overflowX: "auto",
@@ -641,7 +642,7 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
         return Math.min(300, maxLen * 8 + 40);
       });
     }
-    
+  
     const columnWidths = estimateColumnWidths(fields, records);
   
     const headerRow = document.createElement("div");
@@ -670,12 +671,11 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
       headerRow.appendChild(cell);
     });
   
-   
     table.appendChild(headerRow);
   
-    let selectedRow = null; // 🧠 Track currently selected row
+    let selectedRow = null;
   
-    records.forEach((record, rowIndex) => {   // 🧠 rowIndex was missing
+    records.forEach((record, rowIndex) => {
       const dataRow = document.createElement("div");
       Object.assign(dataRow.style, {
         display: "table-row",
@@ -683,19 +683,17 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
         cursor: "pointer",
         transition: "background-color 0.3s, color 0.3s"
       });
-        // 🔥 Flash logic
-        if (flashRowIndex === rowIndex) {
-            dataRow.style.backgroundColor = "#b0f2b6";
-            dataRow.style.transition = "background-color 0.8s ease, color 0.5s ease";
-          
-            setTimeout(() => {
-              dataRow.style.backgroundColor = Theme.colors.background;
-              dataRow.style.color = Theme.colors.text;
-            }, 50); // Start fade almost immediately
-          }
-          
-    
-      // Hover effect
+  
+      if (flashRowIndex === rowIndex) {
+        dataRow.style.backgroundColor = "#b0f2b6";
+        dataRow.style.transition = "background-color 0.8s ease, color 0.5s ease";
+  
+        setTimeout(() => {
+          dataRow.style.backgroundColor = Theme.colors.background;
+          dataRow.style.color = Theme.colors.text;
+        }, 50);
+      }
+  
       dataRow.addEventListener("mouseover", () => {
         if (dataRow !== selectedRow) {
           dataRow.style.backgroundColor = Theme.colors.accent;
@@ -709,7 +707,7 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
         }
       });
   
-      // 🔥 Click-to-select and open editor
+      // 🧠 Correct click-to-select
       dataRow.addEventListener("click", () => {
         if (selectedRow && selectedRow !== dataRow) {
           selectedRow.style.backgroundColor = Theme.colors.background;
@@ -719,13 +717,15 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
           selectedRow.style.backgroundColor = Theme.colors.background;
           selectedRow.style.color = Theme.colors.text;
           selectedRow = null;
+          if (typeof onRowSelect === "function") onRowSelect(null);
         } else {
           selectedRow = dataRow;
           dataRow.style.backgroundColor = Theme.colors.primary;
           dataRow.style.color = "#fff";
-          openSlideoutEditor(record, rowIndex, records, fields); // ✅ Correct usage
+          if (typeof onRowSelect === "function") onRowSelect(rowIndex);
         }
       });
+      
   
       fields.forEach((field, idx) => {
         const dataCell = document.createElement("div");
@@ -740,15 +740,7 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
           overflow: "hidden",
           textOverflow: "ellipsis"
         });
-        const rawValue = record[field.key] !== undefined ? record[field.key].toString() : "-";
-
-        if (currentSearchText && rawValue.toLowerCase().includes(currentSearchText.toLowerCase())) {
-          const regex = new RegExp(`(${currentSearchText})`, 'ig');
-          dataCell.innerHTML = rawValue.replace(regex, '<mark>$1</mark>');
-        } else {
-          dataCell.textContent = rawValue;
-        }
-
+        dataCell.textContent = record[field.key] !== undefined ? record[field.key] : "-";
         dataRow.appendChild(dataCell);
       });
   
@@ -768,6 +760,211 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
   }
   
   
+  
+
+  function showConfirmDialog({ message, onConfirm, onCancel }) {
+    const overlay = document.createElement("div");
+    Object.assign(overlay.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100%",
+      height: "100%",
+      backgroundColor: "rgba(0,0,0,0.4)",
+      backdropFilter: "blur(4px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 2000,
+      opacity: "0",
+      transition: "opacity 0.3s"
+    });
+  
+    const dialog = document.createElement("div");
+    Object.assign(dialog.style, {
+      backgroundColor: Theme.colors.background,
+      color: Theme.colors.text,
+      padding: "24px 20px 20px 20px",
+      borderRadius: "12px",
+      border: "1px solid rgba(255,255,255,0.15)",
+      boxShadow: "0 4px 30px rgba(0,0,0,0.2)",
+      fontFamily: Theme.fonts.base,
+      textAlign: "center",
+      width: "320px",
+      maxWidth: "90%",
+      transform: "scale(0.9)",
+      transition: "transform 0.3s ease, box-shadow 0.5s ease, background-color 0.3s, color 0.3s, border-color 0.3s",
+      overflow: "hidden",
+      position: "relative"
+    });
+  
+    // 🌟 Add elegant top bar
+    const topBar = document.createElement("div");
+    Object.assign(topBar.style, {
+      height: "8px",
+      width: "100%",
+      background: "linear-gradient(to right, #6a11cb, #2575fc)", // purple-blue gradient
+      position: "absolute",
+      top: "0",
+      left: "0",
+      borderTopLeftRadius: "12px",
+      borderTopRightRadius: "12px"
+    });
 
 
+
+    dialog.appendChild(topBar);
+  
+    const messageElem = document.createElement("div");
+    messageElem.textContent = message;
+    Object.assign(messageElem.style, {
+      marginTop: "16px",
+      marginBottom: "20px",
+      fontSize: "18px"
+    });
+  
+    const buttonRow = document.createElement("div");
+    Object.assign(buttonRow.style, {
+      display: "flex",
+      justifyContent: "space-around",
+      gap: "12px"
+    });
+  
+    const confirmBtn = createButton({
+      id: "confirmYesBtn",
+      text: "✅ Yes",
+      color: "success",
+      onClick: () => {
+        document.body.removeChild(overlay);
+        if (typeof onConfirm === "function") onConfirm();
+      }
+    });
+  
+    const cancelBtn = createButton({
+      id: "confirmNoBtn",
+      text: "❌ No",
+      color: "danger",
+      onClick: () => {
+        document.body.removeChild(overlay);
+        if (typeof onCancel === "function") onCancel();
+      }
+    });
+  
+    buttonRow.appendChild(confirmBtn);
+    buttonRow.appendChild(cancelBtn);
+  
+    dialog.appendChild(messageElem);
+    dialog.appendChild(buttonRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+  
+    // 🚀 Fade, pop, and pulse-glow
+    setTimeout(() => {
+      overlay.style.opacity = "1";
+      dialog.style.transform = "scale(1.0)";
+      dialog.style.boxShadow = "0 0 30px rgba(255,255,255,0.1), 0 4px 30px rgba(0,0,0,0.2)";
+    }, 10);
+  }
+  
+  function createSvgBarChart({ width = 600, height = 400, data = [], theme = Theme }) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    svg.style.backgroundColor = theme.colors.background;
+    svg.style.borderRadius = "8px";
+  
+    const padding = 40;
+    const barWidth = (width - padding * 2) / data.length;
+    const maxValue = Math.max(...data.map(d => d.value), 1);
+  
+    data.forEach((item, index) => {
+      const barHeight = (item.value / maxValue) * (height - padding * 2);
+  
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", padding + index * barWidth);
+      rect.setAttribute("y", height - padding);
+      rect.setAttribute("width", barWidth * 0.6);
+      rect.setAttribute("height", 0);
+      rect.setAttribute("fill", theme.colors.primary);
+      rect.classList.add("bar");
+  
+      svg.appendChild(rect);
+  
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", padding + index * barWidth + (barWidth * 0.3));
+      label.setAttribute("y", height - padding + 12);
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("font-size", "10");
+      label.setAttribute("fill", theme.colors.text);
+      label.textContent = item.label.length > 5 ? item.label.slice(0, 5) + "…" : item.label;
+  
+      svg.appendChild(label);
+  
+      // Animate the bar height
+      let currentHeight = 0;
+      function animateBar() {
+        if (currentHeight < barHeight) {
+          currentHeight += 2; // Adjust the increment for speed
+          rect.setAttribute("height", currentHeight);
+          rect.setAttribute("y", height - padding - currentHeight);
+          requestAnimationFrame(animateBar);
+        }
+      }
+      requestAnimationFrame(animateBar);
+    });
+  
+    return svg;
+  }
+  
+
+  function createApiForm() {
+    const form = document.createElement('form');
+    form.id = "apiForm";
+    
+    // Endpoint input
+    const endpointInput = document.createElement('input');
+    endpointInput.placeholder = "Enter API Endpoint";
+    endpointInput.style.marginBottom = "8px";
+    
+    // API Key input (optional)
+    const keyInput = document.createElement('input');
+    keyInput.placeholder = "Enter API Key (if required)";
+    keyInput.style.marginBottom = "8px";
+    
+    // Fetch Button
+    const fetchBtn = createButton({
+      id: "fetchApiBtn",
+      text: "Fetch Data",
+      color: "success",
+      onClick: () => {
+        const endpoint = endpointInput.value.trim();
+        const apiKey = keyInput.value.trim();
+        fetchApiData(endpoint, apiKey);
+      }
+    });
+  
+    // Append to form
+    form.appendChild(endpointInput);
+    form.appendChild(keyInput);
+    form.appendChild(fetchBtn);
+  
+    return form;
+  }
+
+  function handleApiResponse(data) {
+    // This function can update your UI or grid with the response data
+    const gridContainer = document.getElementById("gridContainer");
+  
+    // Clear previous data
+    gridContainer.innerHTML = "";
+  
+    // Display the data in some way
+    const grid = createDataGrid({
+      id: "apiDataGrid",
+      fields: Object.keys(data[0]).map(key => ({ key, label: key })),
+      records: data
+    });
+  
+    gridContainer.appendChild(grid);
+  }
   

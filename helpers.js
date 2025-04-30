@@ -129,3 +129,69 @@ function smartCsvParse(csvText) {
     URL.revokeObjectURL(url);
     console.log("📤 CSV download triggered!");
   }
+
+
+  function confirmAction(message) {
+    return new Promise((resolve) => {
+      showConfirmDialog({
+        message,
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false)
+      });
+    });
+  }
+  
+  // 🔥 Make it globally available
+  if (typeof window !== "undefined") {
+    window.confirmAction = confirmAction;
+  }
+    
+
+  async function fetchApiData(endpoint, apiKey) {
+    if (!endpoint) {
+      alert("Please provide a valid API endpoint.");
+      return;
+    }
+  
+    try {
+      const headers = {};
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+  
+      const response = await fetch(endpoint, { method: 'GET', headers });
+  
+      console.log("API Request:", {
+        url: endpoint,
+        method: 'GET',
+        headers
+      });
+  
+      if (!response.ok) {
+        throw new Error('API request failed: ' + response.statusText);
+      }
+  
+      const contentType = response.headers.get("content-type") || "";
+      let data;
+  
+      if (contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        try {
+          data = JSON.parse(text); // In case it's JSON but with wrong content-type
+        } catch {
+          data = { message: text }; // Fallback to raw text
+        }
+      }
+  
+      console.log("API Response:", data);
+      handleApiResponse(data);
+  
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      alert("Error fetching data: " + (error.message || "Unknown error"));
+    }
+  }
+  
+  
