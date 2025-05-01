@@ -425,8 +425,9 @@ function layout() {
     searchContainer.appendChild(searchInput);
     container.appendChild(searchContainer);
 
-    const apiForm = createApiForm();
-    container.appendChild(apiForm);
+    //Api builder, only works when hosted. so off now
+    //const apiForm = createApiForm();
+    //container.appendChild(apiForm);
   
   // 🧩 Create Toolbar
   const toolbar = document.createElement("div");

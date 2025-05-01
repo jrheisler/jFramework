@@ -159,10 +159,13 @@ function smartCsvParse(csvText) {
         headers['Authorization'] = `Bearer ${apiKey}`;
       }
   
-      const response = await fetch(endpoint, { method: 'GET', headers });
+      const proxyUrl = "https://cors-anywhere.herokuapp.com/";  // Add CORS proxy URL
+      const fullUrl = proxyUrl + endpoint; // Add your endpoint after the proxy URL
+      
+      const response = await fetch(fullUrl, { method: 'GET', headers });
   
       console.log("API Request:", {
-        url: endpoint,
+        url: fullUrl,
         method: 'GET',
         headers
       });
@@ -193,5 +196,6 @@ function smartCsvParse(csvText) {
       alert("Error fetching data: " + (error.message || "Unknown error"));
     }
   }
+  
   
   

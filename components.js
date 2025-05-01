@@ -925,11 +925,13 @@ function createDynamicForm({ formId, spec, onSave, onCancel }) {
     const endpointInput = document.createElement('input');
     endpointInput.placeholder = "Enter API Endpoint";
     endpointInput.style.marginBottom = "8px";
-    
+    endpointInput.style.marginRight = "8px";
+
     // API Key input (optional)
     const keyInput = document.createElement('input');
     keyInput.placeholder = "Enter API Key (if required)";
     keyInput.style.marginBottom = "8px";
+    keyInput.style.marginRight = "8px";
     
     // Fetch Button
     const fetchBtn = createButton({
