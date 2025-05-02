@@ -8,10 +8,9 @@ Theme.onModeChange = () => {
   console.log("Theme switched to", Theme.mode);
 };
 
+let dataStore = DataStore;
 let currentFields = [];
-let currentRecords = [];
 let flashRowIndex = null; // 🔥 Track recently edited row
-let allRecords = []; // <-- Save the full unfiltered data!
 let currentSortField = null;
 let currentSortDirection = "asc"; // or "desc"
 let currentSearchTerm = "";
@@ -21,6 +20,12 @@ let deleteRowBtn;
 // 🧠 Track Selected Row Globally
 let selectedRowIndex = null;
 
+// Initialize DataStore with any existing data
+if (localStorage.getItem("savedGridData")) {
+  const savedData = JSON.parse(localStorage.getItem("savedGridData"));
+  currentFields = savedData.fields;
+  dataStore.setAll(savedData.records);
+}
 
 // 🔵 Create hidden JSON uploader
 const jsonUploader = document.createElement("input");
@@ -38,89 +43,81 @@ csvUploader.style.display = "none";
 document.body.appendChild(csvUploader);
 
 function parseCsvToJson(csvText) {
-    const rows = csvText.trim().split("\n").map(r => r.split(","));
-    const header = rows.shift();
-  
-    const json = rows.map(row => {
-      const record = {};
-      header.forEach((col, idx) => {
-        record[col.trim()] = row[idx]?.trim() || "";
-      });
-      return record;
-    });
-  
-    return json;
-  }
-  
+  const rows = csvText.trim().split("\n").map(r => r.split(","));
+  const header = rows.shift();
 
-
-  
-  function openSlideoutEditor(record, rowIndex) {
-    const panel = document.getElementById("slideoutPanel");
-    panel.innerHTML = ""; // Clear old content
-  
-    const formSpec = Object.keys(record).map(key => ({
-      key,
-      label: key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
-      type: "text",
-      default: record[key]
-    }));
-  
-    const form = createDynamicForm({
-      formId: "editRecordForm",
-      spec: formSpec,
-      onSave: (updatedValues) => {
-        console.log("✅ Updated Record:", updatedValues);
-  
-        // Update in global records
-        currentRecords[rowIndex] = updatedValues;
-        flashRowIndex = rowIndex;  // ✅ Set the row to flash
-  
-        // Save to localStorage
-        localStorage.setItem("savedGridData", JSON.stringify({
-          fields: currentFields,
-          records: currentRecords
-        }));
-  
-        // Rebuild the grid
-        buildGrid(currentFields, currentRecords);
-  
-        // Close slideout
-        closeSlideout();
-      },
-      onCancel: () => {
-        closeSlideout();
-      }
+  const json = rows.map(row => {
+    const record = {};
+    header.forEach((col, idx) => {
+      record[col.trim()] = row[idx]?.trim() || "";
     });
-  
-    panel.appendChild(form);
-    panel.style.transform = "translateX(0)"; // Slide in
-  }
-  
-  function closeSlideout() {
-    const panel = document.getElementById("slideoutPanel");
-    panel.style.transform = "translateX(100%)"; // Slide out
-  }
-  
-  
+    return record;
+  });
+
+  return json;
+}
+
+function openSlideoutEditor(record, rowIndex) {
+  const panel = document.getElementById("slideoutPanel");
+  panel.innerHTML = ""; // Clear old content
+
+  const formSpec = Object.keys(record).map(key => ({
+    key,
+    label: key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()),
+    type: "text",
+    default: record[key]
+  }));
+
+  const form = createDynamicForm({
+    formId: "editRecordForm",
+    spec: formSpec,
+    onSave: (updatedValues) => {
+      console.log("✅ Updated Record:", updatedValues);
+
+      // Update in DataStore
+      dataStore.update(rowIndex + 1, updatedValues);
+      flashRowIndex = rowIndex;  // ✅ Set the row to flash
+
+      // Save to localStorage
+      localStorage.setItem("savedGridData", JSON.stringify({
+        fields: currentFields,
+        records: dataStore.getAll()
+      }));
+
+      // Rebuild the grid
+      buildGrid(currentFields, dataStore.getAll());
+
+      // Close slideout
+      closeSlideout();
+    },
+    onCancel: () => {
+      closeSlideout();
+    }
+  });
+
+  panel.appendChild(form);
+  panel.style.transform = "translateX(0)"; // Slide in
+}
+
+function closeSlideout() {
+  const panel = document.getElementById("slideoutPanel");
+  panel.style.transform = "translateX(100%)"; // Slide out
+}
+
 // 🔵 Global filter text
 let currentSearchText = "";
 
 function filterRecords() {
   if (!currentSearchText) {
-    buildGrid(currentFields, allRecords, { filtered: true });
-    return;
+    return dataStore.getAll();
   }
-
-  const filtered = allRecords.filter(record => {
-    return Object.values(record).some(val =>
-      val.toString().toLowerCase().includes(currentSearchText.toLowerCase())
-    );
-  });
-
-  buildGrid(currentFields, filtered, { filtered: true });
+  return dataStore.getAll().filter(record =>
+    Object.values(record).some(value =>
+      String(value).toLowerCase().includes(currentSearchText.toLowerCase())
+    )
+  );
 }
-// 🔥 Utility to Enable/Disable Toolbar Buttons
+
 function updateToolbarState() {
   console.log("120", selectedRowIndex);
   const hasSelection = selectedRowIndex !== null;
@@ -315,8 +312,10 @@ function layout() {
       onClick: () => {
         const gridSpec = generateFakeGridSpec(10);
         const { fields, records } = convertFormSpecToGridData(gridSpec);
-        buildGrid(fields, records);
-        localStorage.setItem("savedGridData", JSON.stringify({ fields, records }));
+        currentFields = fields;
+        dataStore.setAll(records);
+        buildGrid(fields, dataStore.getAll());
+        localStorage.setItem("savedGridData", JSON.stringify({ fields: currentFields, records: dataStore.getAll() }));
       },
       color: "primary"
     });
@@ -372,8 +371,7 @@ function layout() {
           gridContainer.innerHTML = "No data loaded.";
         }
         currentSearchText = "";
-        allRecords = [];
-        currentRecords = [];
+        dataStore.clear();
         currentFields = [];
         console.log("🧹 Grid and localStorage cleared!");
       },
@@ -444,8 +442,8 @@ function layout() {
     text: "➕ Add Row",
     color: "success",
     onClick: () => {
-      currentRecords.push({});
-      buildGrid(currentFields, currentRecords);
+      const newId = dataStore.add({});
+      buildGrid(currentFields, dataStore.getAll());
     }
   });
   toolbar.appendChild(addRowBtn);
@@ -457,9 +455,8 @@ function layout() {
     color: "primary",
     onClick: () => {
       if (selectedRowIndex !== null) {
-        currentRecords.splice(selectedRowIndex + 1, 0, {}); // Insert empty row
-        // After insertion, the selected row index may shift if required
-        buildGrid(currentFields, currentRecords);
+        const newId = dataStore.insertAfter(selectedRowIndex, {});
+        buildGrid(currentFields, dataStore.getAll());
         updateToolbarState(); // Update toolbar state after modification
       }
     }
@@ -473,10 +470,9 @@ function layout() {
     color: "primary",
     onClick: () => {
       if (selectedRowIndex !== null) {
-        const clone = { ...currentRecords[selectedRowIndex] };
-        currentRecords.splice(selectedRowIndex + 1, 0, clone); // Insert duplicate
-        localStorage.setItem("savedGridData", JSON.stringify({ fields: currentFields, records: currentRecords }));
-        buildGrid(currentFields, currentRecords);
+        const clone = { ...dataStore.get(selectedRowIndex) };
+        const newId = dataStore.insertAfter(selectedRowIndex, clone);
+        buildGrid(currentFields, dataStore.getAll());
         updateToolbarState(); // Update toolbar state after duplication
       }
     }
@@ -491,10 +487,9 @@ function layout() {
       if (selectedRowIndex !== null) {
         const confirmed = await confirmAction("Are you sure you want to delete this row?");
         if (confirmed) {
-          currentRecords.splice(selectedRowIndex, 1);
+          dataStore.remove(selectedRowIndex);
           selectedRowIndex = null;
-          localStorage.setItem("savedGridData", JSON.stringify({ fields: currentFields, records: currentRecords }));
-          buildGrid(currentFields, currentRecords);
+          buildGrid(currentFields, dataStore.getAll());
         }
       }
     }
@@ -558,8 +553,10 @@ function layout() {
             throw new Error("Invalid JSON format!");
           }
       
-          buildGrid(fields, records);
-          localStorage.setItem("savedGridData", JSON.stringify({ fields, records }));
+          currentFields = fields;
+          dataStore.setAll(records);
+          buildGrid(fields, dataStore.getAll());
+          localStorage.setItem("savedGridData", JSON.stringify({ fields: currentFields, records: dataStore.getAll() }));
       
         } catch (e) {
           alert("Failed to load JSON: " + e.message);
@@ -588,8 +585,10 @@ function layout() {
   
         console.log("📂 CSV Parsed:", records);
   
-        buildGrid(fields, records);
-        localStorage.setItem("savedGridData", JSON.stringify({ fields, records }));
+        currentFields = fields;
+        dataStore.setAll(records);
+        buildGrid(fields, dataStore.getAll());
+        localStorage.setItem("savedGridData", JSON.stringify({ fields: currentFields, records: dataStore.getAll() }));
       } catch (e) {
         alert("Failed to parse CSV: " + e.message);
       }
@@ -628,7 +627,8 @@ newApp({
   // 🔵 Auto-restore Grid if saved
   const savedData = localStorage.getItem("savedGridData");
   if (savedData) {
-    const { fields, records } = JSON.parse(savedData);  // ✅
-    buildGrid(fields, records);                         // ✅
+    const { fields, records } = JSON.parse(savedData);
+    currentFields = fields;
+    dataStore.setAll(records);
+    buildGrid(fields, dataStore.getAll());
   }
-  
